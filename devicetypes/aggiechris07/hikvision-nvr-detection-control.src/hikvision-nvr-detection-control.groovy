@@ -38,15 +38,15 @@ metadata {
 
 //* UI tile definitions
 	tiles {
-		standardTile("button", "device.switch", width: 2, height: 2, canChangeIcon: true) {
-			state "off", label: 'Off', action: "switch.on", icon: "st.switches.switch.off", backgroundColor: "#ffffff", nextState: "on"
-				state "on", label: 'On', action: "switch.off", icon: "st.switches.switch.on", backgroundColor: "#79b821", nextState: "off"
+		standardTile("button", "device.switch", width: 2, height: 2, canChangeIcon: false) {
+			state "off", label: 'Off', action: "switch.on", icon: "st.security.alarm.off", backgroundColor: "#ffffff", nextState: "on"
+				state "on", label: 'On', action: "switch.off", icon: "st.security.alarm.on", backgroundColor: "#79b821", nextState: "off"
 		}
-		standardTile("offButton", "device.button", width: 1, height: 1, canChangeIcon: true) {
-			state "default", label: 'Force Off', action: "switch.off", icon: "st.switches.switch.off", backgroundColor: "#ffffff"
+		standardTile("offButton", "device.button", width: 1, height: 1, canChangeIcon: false) {
+			state "default", label: 'Force Off', action: "switch.off", icon: "st.security.alarm.off", backgroundColor: "#ffffff"
 		}
-		standardTile("onButton", "device.switch", width: 1, height: 1, canChangeIcon: true) {
-			state "default", label: 'Force On', action: "switch.on", icon: "st.switches.switch.on", backgroundColor: "#79b821"
+		standardTile("onButton", "device.switch", width: 1, height: 1, canChangeIcon: false) {
+			state "default", label: 'Force On', action: "switch.on", icon: "st.security.alarm.on", backgroundColor: "#79b821"
 		}
 		main "button"
 			details (["button","onButton","offButton"])
@@ -68,36 +68,50 @@ metadata {
 
 //*actions to take when the switch is moved to the on position
 def on() {
-	sendEvent(name: "switch", value: "on") 
 	log.debug "Executing ON" 
+	sendEvent(name: "switch", value: "on") 
     log.debug "intrusion_detection ${intrusion_detection}"
     log.debug "line_detection ${line_detection}"
-    if (intrusion_detection){
-		def onPath = "/ISAPI/Smart/FieldDetection/${camera_number}" 
-		getCameraCurrentSettings(onPath)
-    	}
-	if (line_detection){
-		def onPath = "/ISAPI/Smart/LineDetection/${camera_number}" 
-		getCameraCurrentSettings(onPath)
-    	}   
+	pathSetAndHttpGet()
 	log.debug "Executed ON"
 }
 
 //*actions to take when the switch is moved to the on position
 def off() {
+    log.debug "Executing Off" 
     sendEvent(name: "switch", value: "off") 
-	log.debug "Executing Off" 
-    if (intrusion_detection){
-		def offPath = "/ISAPI/Smart/FieldDetection/${camera_number}" 
-		getCameraCurrentSettings(offPath)
-    	}
-	if (line_detection){
-		def offPath = "/ISAPI/Smart/LineDetection/${camera_number}" 
-		getCameraCurrentSettings(offPath)
-    	}   
+	pathSetAndHttpGet()
 	log.debug "Executed Off"
 }
 
+//*test which detection type to change, and trigger httpget to test settings
+def pathSetAndHttpGet(){
+    if (intrusion_detection){
+		def detectionPath = "/ISAPI/Smart/FieldDetection/${camera_number}" 
+        log.debug "detectionPath ${detectionPath}"
+		getCameraCurrentSettings(detectionPath)
+    	}
+	if (line_detection){
+		def detectionPath = "/ISAPI/Smart/LineDetection/${camera_number}" 
+        log.debug "detectionPath ${detectionPath}"
+		getCameraCurrentSettings(detectionPath)
+    	}   
+	}
+   
+//*test which detection type to change, and send trigger httpput
+def pathSetAndHttpPut(putXml){
+    if (intrusion_detection){
+		def detectionPath = "/ISAPI/Smart/FieldDetection/${camera_number}" 
+        log.debug "detectionPath ${detectionPath}"
+		sendXmlBack(putXml, detectionPath)
+    	}
+	if (line_detection){
+		def detectionPath = "/ISAPI/Smart/LineDetection/${camera_number}" 
+        log.debug "detectionPath ${detectionPath}"
+		sendXmlBack(putXml, detectionPath)
+    	}   
+	}
+    
 def parse(description) {
 	log.debug "Parsing"
     def msg = parseLanMessage(description)
@@ -120,14 +134,7 @@ def parse(description) {
  // 		log.debug "parsedbody after ${parsedbody}"
  		def outputXml = XmlUtil.serialize(parsedbody)
   	    log.debug "outputXml ${outputXml}"
-        if (intrusion_detection){
-			def parsePath = "/ISAPI/Smart/FieldDetection/${camera_number}" 
-			sendXmlBack(outputXml, parsePath)
-    		}
-		if (line_detection){
-			def parsePath = "/ISAPI/Smart/LineDetection/${camera_number}" 
-			sendXmlBack(outputXml, parsePath)
-    		}   
+		pathSetAndHttpPut(outputXml)  
 		}
     if (device.currentState("switch").getValue() == "on" && parsedbody.enabled.text() == "true"){
     	sendEvent(name: "switch", value: "on") 
@@ -139,15 +146,8 @@ def parse(description) {
     	log.debug "after enabled setting ${enabledtest}"
  // 		log.debug "parsedbody after ${parsedbody}"
  		def outputXml = XmlUtil.serialize(parsedbody)
-        if (intrusion_detection){
-			def parsePath = "/ISAPI/Smart/FieldDetection/${camera_number}" 
-			sendXmlBack(outputXml, parsePath)
-    		}
-		if (line_detection){
-			def parsePath = "/ISAPI/Smart/LineDetection/${camera_number}" 
-			sendXmlBack(outputXml, parsePath)
-    		}   
-		}
+		pathSetAndHttpPut(outputXml)
+        }
 	if (device.currentState("switch").getValue() == "off" && parsedbody.enabled.text() == "false"){
     	sendEvent(name: "switch", value: "off")
         log.debug "Already False"
@@ -255,8 +255,6 @@ def sendXmlBack(xmlPutBack, putPath) {
         	log.error "something went wrong with http put: $e"
 	    	}
 	//result
-	sendEvent(name: "switch", value: "on") 
-	log.debug "Executing ON" 
 	//log.debug result
     return method
 }
